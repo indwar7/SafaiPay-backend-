@@ -169,7 +169,7 @@ All responses follow the format:
 | Completed pickup | +10 per kg |
 | Badge bonus | varies (5-100) |
 
-- 1 point = ₹1
+- 10 point = ₹1
 - Minimum withdrawal: ₹100
 - Maximum withdrawal: ₹50,000/day
 
