@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS transactions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id),
     type VARCHAR(20) NOT NULL,
     points INTEGER DEFAULT 0,

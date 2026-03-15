@@ -21,15 +21,15 @@ type Service interface {
 }
 
 type service struct {
-	smsService       *sms.MSG91Service
+	firebaseAuth     *sms.FirebaseAuthService
 	userService      user.Service
 	collectorService collector.Service
 	jwtConfig        *config.JWTConfig
 }
 
-func NewService(smsSvc *sms.MSG91Service, userSvc user.Service, collectorSvc collector.Service, jwtCfg *config.JWTConfig) Service {
+func NewService(fbAuth *sms.FirebaseAuthService, userSvc user.Service, collectorSvc collector.Service, jwtCfg *config.JWTConfig) Service {
 	return &service{
-		smsService:       smsSvc,
+		firebaseAuth:     fbAuth,
 		userService:      userSvc,
 		collectorService: collectorSvc,
 		jwtConfig:        jwtCfg,
@@ -37,11 +37,12 @@ func NewService(smsSvc *sms.MSG91Service, userSvc user.Service, collectorSvc col
 }
 
 func (s *service) SendOTP(ctx context.Context, phone string) error {
-	return s.smsService.SendOTP(ctx, phone)
+	// No-op: Firebase Phone Auth SDK on Flutter handles OTP sending
+	return s.firebaseAuth.SendOTP(ctx, phone)
 }
 
-func (s *service) VerifyOTP(ctx context.Context, phone, otp string) (*AuthResponse, error) {
-	if err := s.smsService.VerifyOTP(ctx, phone, otp); err != nil {
+func (s *service) VerifyOTP(ctx context.Context, phone, firebaseIDToken string) (*AuthResponse, error) {
+	if err := s.firebaseAuth.VerifyOTP(ctx, phone, firebaseIDToken); err != nil {
 		return nil, err
 	}
 
@@ -62,11 +63,11 @@ func (s *service) VerifyOTP(ctx context.Context, phone, otp string) (*AuthRespon
 }
 
 func (s *service) SendCollectorOTP(ctx context.Context, phone string) error {
-	return s.smsService.SendOTP(ctx, phone)
+	return s.firebaseAuth.SendOTP(ctx, phone)
 }
 
-func (s *service) VerifyCollectorOTP(ctx context.Context, phone, otp string) (*AuthResponse, error) {
-	if err := s.smsService.VerifyOTP(ctx, phone, otp); err != nil {
+func (s *service) VerifyCollectorOTP(ctx context.Context, phone, firebaseIDToken string) (*AuthResponse, error) {
+	if err := s.firebaseAuth.VerifyOTP(ctx, phone, firebaseIDToken); err != nil {
 		return nil, err
 	}
 

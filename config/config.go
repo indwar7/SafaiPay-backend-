@@ -75,19 +75,19 @@ func Load() *Config {
 
 	return &Config{
 		Server: ServerConfig{
-			Port: getEnv("SERVER_PORT", "8080"),
+			Port: getEnvMulti([]string{"PORT", "SERVER_PORT"}, "8080"),
 			Mode: getEnv("GIN_MODE", "release"),
 		},
 		DB: DBConfig{
-			Host:     getEnv("DB_HOST", "localhost"),
-			Port:     getEnv("DB_PORT", "5432"),
-			User:     getEnv("DB_USER", "safaipay"),
-			Password: getEnv("DB_PASSWORD", ""),
-			Name:     getEnv("DB_NAME", "safaipay"),
+			Host:     getEnvMulti([]string{"DB_HOST", "PGHOST"}, "localhost"),
+			Port:     getEnvMulti([]string{"DB_PORT", "PGPORT"}, "5432"),
+			User:     getEnvMulti([]string{"DB_USER", "PGUSER"}, "safaipay"),
+			Password: getEnvMulti([]string{"DB_PASSWORD", "PGPASSWORD"}, ""),
+			Name:     getEnvMulti([]string{"DB_NAME", "PGDATABASE"}, "safaipay"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
 		Redis: RedisConfig{
-			Addr:     getEnv("REDIS_ADDR", "localhost:6379"),
+			Addr:     getEnvMulti([]string{"REDIS_ADDR", "REDIS_URL"}, "localhost:6379"),
 			Password: getEnv("REDIS_PASSWORD", ""),
 			DB:       getEnvInt("REDIS_DB", 0),
 		},
@@ -131,6 +131,15 @@ func (c *DBConfig) DSN() string {
 func getEnv(key, fallback string) string {
 	if val := os.Getenv(key); val != "" {
 		return val
+	}
+	return fallback
+}
+
+func getEnvMulti(keys []string, fallback string) string {
+	for _, key := range keys {
+		if val := os.Getenv(key); val != "" {
+			return val
+		}
 	}
 	return fallback
 }

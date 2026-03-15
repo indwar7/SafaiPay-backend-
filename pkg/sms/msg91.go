@@ -1,104 +1,111 @@
 package sms
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
-
-	"github.com/redis/go-redis/v9"
-	"github.com/indwar7/safaipay-backend/config"
 )
 
-type MSG91Service struct {
-	authKey    string
-	templateID string
-	rdb        *redis.Client
-	client     *http.Client
+// FirebaseAuthService verifies Firebase ID tokens instead of MSG91 OTP.
+// OTP send/verify is handled by Flutter's Firebase Phone Auth SDK.
+// The backend only verifies the resulting Firebase ID token.
+type FirebaseAuthService struct {
+	projectID string
+	client    *http.Client
 }
 
-func NewMSG91Service(cfg *config.MSG91Config, rdb *redis.Client) *MSG91Service {
-	return &MSG91Service{
-		authKey:    cfg.AuthKey,
-		templateID: cfg.TemplateID,
-		rdb:        rdb,
-		client:     &http.Client{Timeout: 10 * time.Second},
+func NewFirebaseAuthService(projectID string) *FirebaseAuthService {
+	return &FirebaseAuthService{
+		projectID: projectID,
+		client:    &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
-func (s *MSG91Service) SendOTP(ctx context.Context, phone string) error {
-	url := "https://control.msg91.com/api/v5/otp"
+// SendOTP is a no-op — Firebase Phone Auth SDK handles this on the Flutter side.
+func (s *FirebaseAuthService) SendOTP(ctx context.Context, phone string) error {
+	slog.Info("OTP send handled by Firebase Phone Auth on client side", "phone", phone)
+	return nil
+}
 
-	payload := map[string]string{
-		"template_id": s.templateID,
-		"mobile":      phone,
-		"authkey":     s.authKey,
+// VerifyOTP verifies a Firebase ID token (passed as the "otp" field from Flutter).
+// Flutter sends the Firebase ID token after successful phone auth.
+// Returns nil if valid, error if invalid.
+func (s *FirebaseAuthService) VerifyOTP(ctx context.Context, phone, firebaseIDToken string) error {
+	// Use the tokeninfo endpoint to validate
+	tokenInfoURL := "https://oauth2.googleapis.com/tokeninfo?id_token=" + firebaseIDToken
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tokenInfoURL, nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
 	}
 
-	body, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("verify token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Alternative: verify via Firebase's secure token endpoint
+	if resp.StatusCode != http.StatusOK {
+		// Fallback: verify via Firebase Auth REST API
+		return s.verifyViaFirebase(ctx, firebaseIDToken, phone)
+	}
+
+	return nil
+}
+
+func (s *FirebaseAuthService) verifyViaFirebase(ctx context.Context, idToken, expectedPhone string) error {
+	url := "https://identitytoolkit.googleapis.com/v1/accounts:lookup"
+
+	payload := fmt.Sprintf(`{"idToken":"%s"}`, idToken)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
+	// Add API key as query param
+	q := req.URL.Query()
+	q.Add("key", s.projectID)
+	req.URL.RawQuery = q.Encode()
+
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("send OTP: %w", err)
+		return fmt.Errorf("firebase verify: %w", err)
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Error("MSG91 OTP send failed", "status", resp.StatusCode, "body", string(respBody))
-		return fmt.Errorf("MSG91 returned status %d", resp.StatusCode)
+		slog.Error("firebase token verification failed", "status", resp.StatusCode, "body", string(body))
+		return fmt.Errorf("invalid token")
 	}
-
-	slog.Info("OTP sent", "phone", phone)
-	return nil
-}
-
-func (s *MSG91Service) VerifyOTP(ctx context.Context, phone, otp string) error {
-	attemptsKey := fmt.Sprintf("otp_attempts:%s", phone)
-
-	attempts, _ := s.rdb.Get(ctx, attemptsKey).Int()
-	if attempts >= 3 {
-		return fmt.Errorf("maximum verification attempts exceeded")
-	}
-
-	url := fmt.Sprintf("https://control.msg91.com/api/v5/otp/verify?mobile=%s&otp=%s&authkey=%s",
-		phone, otp, s.authKey)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return fmt.Errorf("create request: %w", err)
-	}
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("verify OTP: %w", err)
-	}
-	defer resp.Body.Close()
 
 	var result struct {
-		Type    string `json:"type"`
-		Message string `json:"message"`
+		Users []struct {
+			PhoneNumber string `json:"phoneNumber"`
+		} `json:"users"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(body, &result); err != nil {
 		return fmt.Errorf("decode response: %w", err)
 	}
 
-	if result.Type != "success" {
-		s.rdb.Incr(ctx, attemptsKey)
-		s.rdb.Expire(ctx, attemptsKey, 5*time.Minute)
-		return fmt.Errorf("invalid OTP")
+	if len(result.Users) == 0 {
+		return fmt.Errorf("no user found for token")
 	}
 
-	s.rdb.Del(ctx, attemptsKey)
+	// Verify the phone number matches
+	if result.Users[0].PhoneNumber != expectedPhone {
+		slog.Error("phone mismatch", "expected", expectedPhone, "got", result.Users[0].PhoneNumber)
+		return fmt.Errorf("phone number mismatch")
+	}
+
+	slog.Info("Firebase phone auth verified", "phone", expectedPhone)
 	return nil
 }

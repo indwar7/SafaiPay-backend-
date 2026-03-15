@@ -7,7 +7,7 @@ import (
 )
 
 type Badge struct {
-	ID           uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	ID           uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	Name         string    `gorm:"size:100;not null" json:"name"`
 	Description  string    `json:"description"`
 	IconURL      string    `json:"icon_url"`
@@ -19,7 +19,7 @@ type Badge struct {
 }
 
 type UserBadge struct {
-	ID         uuid.UUID  `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	ID         uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	UserID     uuid.UUID  `gorm:"type:uuid;not null;index;uniqueIndex:idx_user_badge" json:"user_id"`
 	BadgeID    uuid.UUID  `gorm:"type:uuid;not null;uniqueIndex:idx_user_badge" json:"badge_id"`
 	Progress   int        `gorm:"default:0" json:"progress"`

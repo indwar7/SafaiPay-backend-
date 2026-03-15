@@ -7,7 +7,7 @@ import (
 )
 
 type Booking struct {
-	ID           uuid.UUID  `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	ID           uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	UserID       uuid.UUID  `gorm:"type:uuid;not null;index" json:"user_id"`
 	CollectorID  *uuid.UUID `gorm:"type:uuid;index" json:"collector_id,omitempty"`
 	WasteType    string     `gorm:"size:50;not null" json:"waste_type"`

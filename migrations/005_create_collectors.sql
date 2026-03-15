@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS collectors (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     phone_number VARCHAR(15) UNIQUE NOT NULL,
     name VARCHAR(100),
     ward VARCHAR(50),

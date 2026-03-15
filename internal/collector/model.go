@@ -7,7 +7,7 @@ import (
 )
 
 type Collector struct {
-	ID                uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	ID                uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	PhoneNumber       string    `gorm:"uniqueIndex;size:15;not null" json:"phone_number"`
 	Name              string    `gorm:"size:100" json:"name"`
 	Ward              string    `gorm:"size:50;index" json:"ward"`

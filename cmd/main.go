@@ -52,14 +52,14 @@ func main() {
 		log.Fatalf("failed to auto-migrate: %v", err)
 	}
 
-	// Connect Redis
+	// Connect Redis (non-fatal — app works without it, just no rate limiting/leaderboard)
 	rdb, err := database.NewRedis(&cfg.Redis)
 	if err != nil {
-		log.Fatalf("failed to connect to Redis: %v", err)
+		slog.Warn("failed to connect to Redis, some features will be unavailable", "error", err)
 	}
 
 	// Initialize external services
-	smsService := sms.NewMSG91Service(&cfg.MSG91, rdb)
+	firebaseAuth := sms.NewFirebaseAuthService(cfg.FCM.ProjectID)
 
 	r2Service, err := storage.NewR2Service(&cfg.R2)
 	if err != nil {
@@ -72,7 +72,7 @@ func main() {
 	// Initialize services
 	userService := user.NewService(db)
 	collectorService := collector.NewService(db)
-	authService := auth.NewService(smsService, userService, collectorService, &cfg.JWT)
+	authService := auth.NewService(firebaseAuth, userService, collectorService, &cfg.JWT)
 	reportService := report.NewService(db, userService, r2Service, notifService)
 	bookingService := booking.NewService(db, userService, notifService)
 	paymentService := payment.NewService(db, userService, notifService, &cfg.Razorpay)
